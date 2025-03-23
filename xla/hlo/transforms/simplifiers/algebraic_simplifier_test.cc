@@ -321,6 +321,26 @@ TEST_F(AlgebraicSimplifierTest, FactorFpAddition) {
                   m::ConstantScalar(0.125))));
 }
 
+TEST_F(AlgebraicSimplifierTest, WarmUp) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      p0 = f32[] parameter(0)
+      p1 = f32[] parameter(1)
+      p2 = f32[] parameter(2)
+      x = f32[] divide(p0, p2)
+      y = f32[] divide(p1, p2)
+      ROOT sum = f32[] add(x, x)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Divide(
+                  m::AddAnyOrder(m::Parameter(0), m::Parameter(1)),
+                  m::Parameter(2))));
+}
+
 // (Abs(A)) * (Abs(A)) => (A*A)
 TEST_F(AlgebraicSimplifierTest, SquareOfAbs) {
   const char* kModuleStr = R"(
@@ -348,7 +368,7 @@ TEST_F(AlgebraicSimplifierTest, MultiplyChain) {
       d = f32[] constant(4)
       x = f32[] multiply(p0, c)
       y = f32[] multiply(p1, d)
-      ROOT z = f32[] multiply(x, y)
+      ROOT z = f32[] multiply(x, x)
     }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));

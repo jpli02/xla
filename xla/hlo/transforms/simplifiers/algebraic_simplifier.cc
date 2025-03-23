@@ -886,7 +886,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
         add,
         HloInstruction::CreateBinary(add->shape(), HloOpcode::kAdd, rhs, lhs));
   }
-
+  
   // Reassociate to allow constant folding.
   //
   // Note: This is not general.  For example, we won't reassociate
@@ -1014,6 +1014,22 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
 
   if (options_.is_layout_sensitive()) {
     return absl::OkStatus();
+  }
+
+  VLOG(10) << "trying transform [(x / y) + (z / y) => (x + z) / y]";
+
+  HloInstruction *x, *y, *z;
+  if (Match(add, m::Add(
+                        m::Divide(m::Op(&x), m::Op(&x)),
+                        m::Divide(m::Op(&z), m::Op().Is(y))))) {
+    // Create the new instruction ewdiv(ewadd(x,z),y)
+    TF_ASSIGN_OR_RETURN(
+        HloInstruction* new_add,
+        MakeBinaryHlo(HloOpcode::kAdd, x, z));
+    TF_ASSIGN_OR_RETURN(
+        HloInstruction* new_divide,
+        MakeBinaryHlo(HloOpcode::kDivide, new_add, y));
+    return ReplaceWithNewInstruction(add, new_divide);
   }
 
   HloInstruction* lhs_scatter_operand = nullptr;
